@@ -31,6 +31,12 @@ def cria_reserva(reserva: Reserva):
             )
 
         # TODO - Validar se existe uma reserva para o mesmo documento
+        existing_reserva = session.exec(select(Reserva).where(Reserva.documento == reserva.documento)).first()
+        if existing_reserva:
+            return JSONResponse(
+                content={"message": "Já existe uma reserva com este número de documento."},
+                status_code=400,
+            )
 
         codigo_reserva = "".join(
             [str(random.randint(0, 999)).zfill(3) for _ in range(2)]
@@ -44,8 +50,40 @@ def cria_reserva(reserva: Reserva):
 
 
 @reservas_router.post("/{codigo_reserva}/checkin/{num_poltrona}")
-def faz_checkin(codigo_reserva: str, num_poltrona: int):
+def faz_checkin(codigo_reserva: str, num_poltrona: str):
     # TODO - Implementar reserva de poltrona
     pass
+    with get_session() as session:
+        reserva = session.exec(select(Reserva).where(Reserva.codigo_reserva == codigo_reserva)).first()
+        if not reserva:
+            return JSONResponse(
+                content={"message": "Reserva não encontrada."},
+                status_code=404,
+            )
+        
+        voo = session.exec(select(Voo).where(Voo.id == reserva.voo_id)).first()
 
+        if not voo:
+            return JSONResponse(
+                content={"message": "Voo não encontrado"},
+                status_code=404,
+            )
+        
 # TODO - Implementar troca de reserva de poltrona
+        
+        ultimo_digito = int(num_poltrona[-1])
+
+        poltrona = getattr(voo, f"poltrona_{ultimo_digito}")
+
+        if poltrona:
+            return JSONResponse(
+                content={"message": "Poltrona já ocupada"},
+                status_code=400,
+            )
+
+        setattr(voo, f"poltrona_{ultimo_digito}", codigo_reserva)
+        session.commit()
+        return JSONResponse(
+            content={"message": "Check-in efetuado com sucesso"},
+            status_code=200,
+        )

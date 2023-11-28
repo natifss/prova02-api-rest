@@ -4,6 +4,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from sqlmodel import select
 
+from src.routes.reservas_routes import Reserva
 from src.config.database import get_session
 from src.models.voos_model import Voo
 
@@ -33,7 +34,7 @@ def cria_voo(voo: Voo):
 
 @voos_router.get("/vendas")
 def lista_voos_venda():
-    LIMITE_HORAS = 3
+    LIMITE_HORAS = 2
     with get_session() as session:
         hora_limite = datetime.now() + timedelta(hours=LIMITE_HORAS)
         statement = select(Voo).where(Voo.data_saida >= hora_limite)
@@ -49,3 +50,35 @@ def lista_voos():
         return voo
 
 # TODO - Implementar rota que retorne as poltronas por id do voo
+@voos_router.patch("/{codigo_reserva}/checkin/{num_poltrona}")
+def faz_checkin_reserva(codigo_reserva: str, num_poltrona: int):
+    with get_session() as session:
+        reserva = session.exec(select(Reserva).where(Reserva.codigo_reserva == codigo_reserva)).first()
+        if not reserva:
+            return JSONResponse(
+                content={"message": "Reserva não encontrada."},
+                status_code=404,
+            )
+        
+        voo = session.exec(select(Voo).where(Voo.id == reserva.voo_id)).first()
+
+        if not voo:
+            return JSONResponse(
+                content={"message": "Voo não encontrado"},
+                status_code=404,
+            )
+        
+        poltrona = getattr(voo, f"poltrona_{num_poltrona}")
+
+        if poltrona:
+            return JSONResponse(
+                content={"message": "Poltrona ocupada"},
+                status_code=403,
+            )
+
+        setattr(voo, f"poltrona_{num_poltrona}", codigo_reserva)
+        session.commit()
+        return JSONResponse(
+            content={"message": "Check-in efetuado com sucesso"},
+            status_code=200,
+        )
